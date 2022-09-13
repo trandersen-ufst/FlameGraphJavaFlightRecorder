@@ -14,11 +14,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.counting;
+import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
 
 /**
@@ -62,17 +62,19 @@ public class StackCollapseFlightRecorder {
                     .filter(it -> JDK_EXECUTION_SAMPLE.equals(it.getEventType().getName()))
 
                     // fold reversed frames into a single semicolon separated string
+
                     .map(event -> reverseList(event.getStackTrace().getFrames()).stream()
                             .map(f -> "%s::%s".formatted(
                                     f.getMethod().getType().getName(),
                                     f.getMethod().getName())
                             )
-                            .collect(joining(";")))
-
-                    // collapse identical frames-strings into "frames-string count". (uniq -c)
-                    .collect(Collectors.groupingBy(identity(), counting()));
+                            .collect(joining(";"))
+                    )
+                    // ORDER BY name GROUP BY name
+                    .collect(groupingBy(identity(), counting()));
 
             return frameStringCountMap
+                    // convert "frames-string"->count into "frames-string -> count".
                     .entrySet().stream().map(e -> "%s %d".formatted(e.getKey(), e.getValue()))
                     .sorted()
                     .toList();
