@@ -1,0 +1,5 @@
+.idea
+*.jfr
+*.collapsed
+*.svg
+target/
