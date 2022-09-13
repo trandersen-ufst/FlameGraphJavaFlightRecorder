@@ -1,8 +1,6 @@
 
 // If compiler fails here, you need an OpenJDK Java 17 or later.
 
-import jdk.jfr.consumer.RecordedEvent;
-import jdk.jfr.consumer.RecordedFrame;
 import jdk.jfr.consumer.RecordingFile;
 
 import java.io.IOException;
@@ -13,11 +11,15 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static java.util.function.Function.identity;
+import static java.util.stream.Collectors.counting;
+import static java.util.stream.Collectors.joining;
 
 /**
  * Adapted from <a href="https://github.com/billybong/JavaFlames/blob/main/JavaFlames.java">https://github.com/billybong/JavaFlames/blob/main/JavaFlames.java</a>
@@ -35,7 +37,7 @@ public class StackCollapseFlightRecorder {
         if (!Files.exists(jfrFile)) {
             exit(2, jfrFile + " not found.");
         }
-        for (var line : produceFlameGraphLog(jfrFile).toList()) {
+        for (var line : collapseFlightRecorderEvents(jfrFile)) {
             System.out.print(line + "\n"); // Ensure Unix endings.
         }
     }
@@ -46,62 +48,45 @@ public class StackCollapseFlightRecorder {
     }
 
 
-    public static Stream<String> produceFlameGraphLog(final Path jfrRecording) throws IOException {
-        var recordingFile = new RecordingFile(jfrRecording);
-        return extractEvents(recordingFile)
-                .filter(it -> JDK_EXECUTION_SAMPLE.equals(it.getEventType().getName()))
-                // fold frames into a single semicolon separated string
-                .map(event -> collapseFrames(event.getStackTrace().getFrames()))
-                // collapse identical frames into "frames count". (uniq -c)
-                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()))
-                .entrySet().stream().map(e -> "%s %d".formatted(e.getKey(), e.getValue()))
-                .sorted()
-                .onClose(io(recordingFile::close));
-    }
+    public static List<String> collapseFlightRecorderEvents(final Path jfrRecordingPath) throws IOException {
 
-    public static String collapseFrames(List<RecordedFrame> frames) {
-        /*
-        var methodNames = new ArrayDeque<String>(frames.size());
-        for (var frame : frames) {
-            final RecordedMethod method = frame.getMethod();
-            methodNames.addFirst("%s::%s".formatted(method.getType().getName(), method.getName()));
+        // Streams rapidly becomes quite complex.  Considering how to improve readability.
+
+        try (var jfr = new RecordingFile(jfrRecordingPath)) {
+
+            Map<String, Long> frameStringCountMap = Stream
+                    // convert JFR "hasMoreEvents? + get" to stream.
+                    .generate(() -> jfr.hasMoreEvents() ? io(jfr::readEvent).get() : null)
+                    .takeWhile(Objects::nonNull)
+
+                    .filter(it -> JDK_EXECUTION_SAMPLE.equals(it.getEventType().getName()))
+
+                    // fold reversed frames into a single semicolon separated string
+                    .map(event -> reverseList(event.getStackTrace().getFrames()).stream()
+                            .map(f -> "%s::%s".formatted(
+                                    f.getMethod().getType().getName(),
+                                    f.getMethod().getName())
+                            )
+                            .collect(joining(";")))
+
+                    // collapse identical frames-strings into "frames-string count". (uniq -c)
+                    .collect(Collectors.groupingBy(identity(), counting()));
+
+            return frameStringCountMap
+                    .entrySet().stream().map(e -> "%s %d".formatted(e.getKey(), e.getValue()))
+                    .sorted()
+                    .toList();
         }
-        return String.join(";", methodNames);
-
-         */
-
-        // The string needs to be reversed.  Can it be done efficiently with streams?
-
-        var l1 = frames.stream()
-                .map(frame -> frame.getMethod())
-                .map(m -> "%s::%s".formatted(m.getType().getName(), m.getName()))
-                .toList();
-        var l2 = new ArrayList<>(l1);
-        Collections.reverse(l2);
-        return String.join(";", l2);
     }
 
-    public static Stream<RecordedEvent> extractEvents(RecordingFile recordingFile) {
-        return Stream.generate(() ->
-                recordingFile.hasMoreEvents() ?
-                        io(recordingFile::readEvent).get() :
-                        null
-        ).takeWhile(Objects::nonNull);
+    private static <T> List<T> reverseList(List<T> frames) {
+        var l = new ArrayList<>(frames);
+        Collections.reverse(l);
+        return l;
     }
 
     // Helpers for dealing with checked IOException's in lambdas
 
-    @FunctionalInterface
-    interface IORunnable {
-        void run() throws IOException;
-    }
-
-    /*
-        @FunctionalInterface
-        interface IOConsumer<T> {
-            void apply(T input) throws IOException;
-        }
-    */
     @FunctionalInterface
     interface IOSupplier<T> {
         T get() throws IOException;
@@ -111,29 +96,6 @@ public class StackCollapseFlightRecorder {
         return () -> {
             try {
                 return supplier.get();
-            } catch (final IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        };
-    }
-
-    /*
-    private static <T> Consumer<T> io(IOConsumer<T> consumer) {
-        return t -> {
-            try {
-                consumer.apply(t);
-            } catch (final IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        };
-    }
-
-     */
-
-    private static Runnable io(IORunnable runnable) {
-        return () -> {
-            try {
-                runnable.run();
             } catch (final IOException e) {
                 throw new UncheckedIOException(e);
             }
