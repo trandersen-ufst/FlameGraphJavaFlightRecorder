@@ -11,7 +11,6 @@ import java.nio.file.Paths;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -33,7 +32,7 @@ public class StackCollapseFlightRecorder {
         if (!Files.exists(jfrFile)) {
             exit(2, jfrFile + " not found.");
         }
-        for (var line : produceFlameGraphLog(jfrFile).collect(Collectors.toList())) {
+        for (var line : produceFlameGraphLog(jfrFile).toList()) {
             System.out.print(line + "\n"); // Ensure Unix endings.
         }
     }
@@ -81,11 +80,12 @@ public class StackCollapseFlightRecorder {
         void run() throws IOException;
     }
 
-    @FunctionalInterface
-    interface IOConsumer<T> {
-        void apply(T input) throws IOException;
-    }
-
+    /*
+        @FunctionalInterface
+        interface IOConsumer<T> {
+            void apply(T input) throws IOException;
+        }
+    */
     @FunctionalInterface
     interface IOSupplier<T> {
         T get() throws IOException;
@@ -101,6 +101,7 @@ public class StackCollapseFlightRecorder {
         };
     }
 
+    /*
     private static <T> Consumer<T> io(IOConsumer<T> consumer) {
         return t -> {
             try {
@@ -110,6 +111,8 @@ public class StackCollapseFlightRecorder {
             }
         };
     }
+
+     */
 
     private static Runnable io(IORunnable runnable) {
         return () -> {
