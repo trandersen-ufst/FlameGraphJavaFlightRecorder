@@ -1,6 +1,8 @@
+
+// If compiler fails here, you need an OpenJDK Java 17 or later.
+
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordedFrame;
-import jdk.jfr.consumer.RecordedMethod;
 import jdk.jfr.consumer.RecordingFile;
 
 import java.io.IOException;
@@ -8,7 +10,8 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -56,16 +59,29 @@ public class StackCollapseFlightRecorder {
                 .onClose(io(recordingFile::close));
     }
 
-    private static String collapseFrames(List<RecordedFrame> frames) {
+    public static String collapseFrames(List<RecordedFrame> frames) {
+        /*
         var methodNames = new ArrayDeque<String>(frames.size());
         for (var frame : frames) {
             final RecordedMethod method = frame.getMethod();
             methodNames.addFirst("%s::%s".formatted(method.getType().getName(), method.getName()));
         }
         return String.join(";", methodNames);
+
+         */
+
+        // The string needs to be reversed.  Can it be done efficiently with streams?
+
+        var l1 = frames.stream()
+                .map(frame -> frame.getMethod())
+                .map(m -> "%s::%s".formatted(m.getType().getName(), m.getName()))
+                .toList();
+        var l2 = new ArrayList<>(l1);
+        Collections.reverse(l2);
+        return String.join(";", l2);
     }
 
-    private static Stream<RecordedEvent> extractEvents(RecordingFile recordingFile) {
+    public static Stream<RecordedEvent> extractEvents(RecordingFile recordingFile) {
         return Stream.generate(() ->
                 recordingFile.hasMoreEvents() ?
                         io(recordingFile::readEvent).get() :
