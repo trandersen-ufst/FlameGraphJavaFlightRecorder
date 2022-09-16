@@ -1,6 +1,6 @@
-
 // If compiler fails here, you need an OpenJDK Java 17 or later.
 
+import jdk.jfr.EventType;
 import jdk.jfr.consumer.RecordingFile;
 
 import java.io.IOException;
@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,37 +23,24 @@ import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
 
 /**
- * Adapted from <a href="https://github.com/billybong/JavaFlames/blob/main/JavaFlames.java">https://github.com/billybong/JavaFlames/blob/main/JavaFlames.java</a>
+ * Adapted from
+ * <a href="https://github.com/billybong/JavaFlames/blob/main/JavaFlames.java">https://github.com/billybong/JavaFlames/blob/main/JavaFlames.java</a>
  */
 
 public class StackCollapseFlightRecorder {
 
     public static final String JDK_EXECUTION_SAMPLE = "jdk.ExecutionSample";
 
-    public static void main(String[] args) throws IOException {
-        if (args.length != 1) {
-            exit(1, "expected jfr input file as argument");
-        }
-        var jfrFile = Paths.get(args[0]);
-        if (!Files.exists(jfrFile)) {
-            exit(2, jfrFile + " not found.");
-        }
-        for (var line : collapseFlightRecorderEvents(jfrFile)) {
-            System.out.print(line + "\n"); // Ensure Unix endings.
-        }
-    }
-
-    private static void exit(int code, String message) {
-        System.err.println(message);
-        System.exit(code);
-    }
-
-
     public static List<String> collapseFlightRecorderEvents(final Path jfrRecordingPath) throws IOException {
 
         // Streams rapidly becomes quite complex.  Considering how to improve readability.
 
         try (var jfr = new RecordingFile(jfrRecordingPath)) {
+
+            var eventTypes = new ArrayList<>(jfr.readEventTypes().stream()
+                    .map(EventType::getName)
+                    .toList());
+            eventTypes.sort(Comparator.naturalOrder());
 
             Map<String, Long> frameStringCountMap = Stream
                     // convert JFR "hasMoreEvents? + get" to stream.
@@ -81,17 +69,9 @@ public class StackCollapseFlightRecorder {
         }
     }
 
-    private static <T> List<T> reverseList(List<T> frames) {
-        var l = new ArrayList<>(frames);
-        Collections.reverse(l);
-        return l;
-    }
-
-    // Helpers for dealing with checked IOException's in lambdas
-
-    @FunctionalInterface
-    interface IOSupplier<T> {
-        T get() throws IOException;
+    private static void exit(int code, String message) {
+        System.err.println(message);
+        System.exit(code);
     }
 
     private static <T> Supplier<T> io(IOSupplier<T> supplier) {
@@ -102,5 +82,31 @@ public class StackCollapseFlightRecorder {
                 throw new UncheckedIOException(e);
             }
         };
+    }
+
+    public static void main(String[] args) throws IOException {
+        if (args.length != 1) {
+            exit(1, "expected jfr input file as argument");
+        }
+        var jfrFile = Paths.get(args[0]);
+        if (!Files.exists(jfrFile)) {
+            exit(2, jfrFile + " not found.");
+        }
+        for (var line : collapseFlightRecorderEvents(jfrFile)) {
+            System.out.print(line + "\n"); // Ensure Unix endings.
+        }
+    }
+
+    // Helpers for dealing with checked IOException's in lambdas
+
+    private static <T> List<T> reverseList(List<T> frames) {
+        var l = new ArrayList<>(frames);
+        Collections.reverse(l);
+        return l;
+    }
+
+    @FunctionalInterface
+    interface IOSupplier<T> {
+        T get() throws IOException;
     }
 }

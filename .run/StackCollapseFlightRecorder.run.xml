@@ -2,7 +2,7 @@
   <configuration default="false" name="StackCollapseFlightRecorder" type="Application" factoryName="Application" nameIsGenerated="true">
     <output_file path="saved.collapsed" is_save="true" />
     <option name="MAIN_CLASS_NAME" value="StackCollapseFlightRecorder" />
-    <module name="FlameGraphJavaFlightRecorder" />
+    <module name="flame-graph-java-flight-recorder" />
     <option name="PROGRAM_PARAMETERS" value="saved.jfr" />
     <method v="2">
       <option name="Make" enabled="true" />
